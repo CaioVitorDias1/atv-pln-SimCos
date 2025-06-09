@@ -1,3 +1,31 @@
+
+
+import re
+import nltk
+import numpy as np
+import pandas as pd
+from sklearn.metrics.pairwise import cosine_similarity
+from nltk.corpus import stopwords
+from nltk.stem import RSLPStemmer
+from sentence_transformers import SentenceTransformer
+
+
+nltk.download('stopwords')
+nltk.download('rslp')
+
+
+stop_words = set(stopwords.words('portuguese'))
+stemmer = RSLPStemmer()
+
+
+def preprocess(text):
+    text = text.lower()
+    text = re.sub(r'[^\w\s]', '', text)
+    tokens = text.split()
+    tokens = [stemmer.stem(word) for word in tokens if word not in stop_words]
+    return ' '.join(tokens)
+
+
 review5estrelas = [
     "Parabéns aos envolvidos, Magazine Luiza pelo site e ofertas, KaBuM! pelo excelente trabalho com a embalagem e MagaLog pela rapidez na entrega. Produto funcionando perfeitamente.",
     "Podem garantir o seu, pois garanti o meu em uma ótima promoção e, sonho de infância realizado.",
@@ -17,22 +45,51 @@ review1estrelas =[
     "Game totalmente desnecessário, prometendo o q nao ira entregar, sendo q o ps5 padrão nao usou acho e nem a metade de sua capacidade, ainda nao vi um jogo em nova geração q realmente representasse a nova geração, em fim e isso msm eles bota porque sabe q vender minha opinião"
 ]
 
-all_reviews = review5estrelas + review4estrelas + review1estrelas
 
+reviews_1_proc = [preprocess(r) for r in review1estrelas]
+reviews_4_proc = [preprocess(r) for r in review4estrelas]
+reviews_5_proc = [preprocess(r) for r in review5estrelas]
+
+
+for i, r in enumerate(reviews_1_proc, 1):
+    print(f"Review de {i} estrelas pré-processado:", r)
+
+
+all_reviews = reviews_1_proc + reviews_4_proc + reviews_5_proc
 labels = (
-    ["5 estrelas"] * len(review5estrelas) +
-    ["4 estrelas"] * len(review4estrelas) +
-    ["1 estrela"] * len(review1estrelas)
+    ["1 estrela"] * len(reviews_1_proc) +
+    ["4 estrelas"] * len(reviews_4_proc) +
+    ["5 estrelas"] * len(reviews_5_proc)
 )
+
 
 model = SentenceTransformer('all-MiniLM-L6-v2')
 embeddings = model.encode(all_reviews)
 
-# Matriz de similaridade
+
 sim_matrix = cosine_similarity(embeddings)
 
-# Criar DataFrame com rótulos
-df_sim = pd.DataFrame(sim_matrix, index=labels, columns=labels)
 
-print("Matriz de Similaridade entre todos os reviews:")
+df_sim = pd.DataFrame(sim_matrix, index=labels, columns=labels)
+print("\nMatriz de Similaridade:")
 print(df_sim.round(3))
+
+
+def group_similarity(index_group1, index_group2):
+    sims = []
+    for i in index_group1:
+        for j in index_group2:
+            if i != j:  
+                sims.append(sim_matrix[i][j])
+    return np.mean(sims)
+
+
+idx_1 = [0, 1, 2]
+idx_2 = [3, 4, 5]
+idx_3 = [6, 7, 8]
+
+
+print("\nSimilaridade média entre grupos:")
+print(f"1 estrela vs 4 estrelas: {group_similarity(idx_1, idx_2):.4f}")
+print(f"1 estrela vs 5 estrelas: {group_similarity(idx_1, idx_3):.4f}")
+print(f"4 estrelas vs 5 estrelas: {group_similarity(idx_2, idx_3):.4f}")
